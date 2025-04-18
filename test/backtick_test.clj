@@ -76,17 +76,10 @@
     ;; OK (could remove concat call for bonus points)
     (is (= '(clojure.core/vec (clojure.core/concat local-variable))
            (macroexpand-1 '(backtick/syntax-quote [~@local-variable]))))
-    ;;TODO should be #{}
-    (is (= '(clojure.core/set (clojure.core/concat))
-           (macroexpand-1 '(backtick/syntax-quote #{}))))
-    ;;TODO should be #{a}
-    (is (= '(clojure.core/set (clojure.core/concat [a]))
-           (macroexpand-1 '(backtick/syntax-quote #{~a}))))
-    ;;TODO should be (set a)
-    (is (= '(clojure.core/set (clojure.core/concat a))
-           (macroexpand-1 '(backtick/syntax-quote #{~@a}))))
-    ;;TODO should be (clojure.core/hash-set a b)
-    (is (= '(clojure.core/set (clojure.core/concat [a] [b]))
+    (is (= #{} (macroexpand-1 '(backtick/syntax-quote #{}))))
+    (is (= '#{a} (macroexpand-1 '(backtick/syntax-quote #{~a}))))
+    (is (= '(clojure.core/set a) (macroexpand-1 '(backtick/syntax-quote #{~@a}))))
+    (is (= '(clojure.core/hash-set a b)
            (macroexpand-1 (list 'backtick/syntax-quote (sorted-set-by #(compare (last %1) (last %2)) '~a '~b)))))
     ;;OK
     (is (= '(clojure.core/set (clojure.core/concat a b))

@@ -37,9 +37,18 @@
                       [(quote-fn* x)]))
             cat (doall `(concat ~@parts))]
         (cond
-          (vector? form) (if splice? `(vec ~cat) (mapv first parts))
+          (vector? form) (if splice?
+                           `(vec ~cat)
+                           (mapv first parts))
           (map? form) `(apply hash-map ~cat)
-          (set? form) `(set ~cat)
+          (set? form) (if splice?
+                        (if (next parts)
+                          `(set ~cat)
+                          `(set ~(first parts)))
+                        (case (count parts)
+                          0 #{}
+                          1 #{(ffirst parts)}
+                          `(hash-set ~@(map first parts))))
           (seq? form) `(apply list ~cat)
           :else (throw (Exception. "Unknown collection type"))))
     :else `'~form))
