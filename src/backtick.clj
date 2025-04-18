@@ -22,6 +22,12 @@
 (defn unquote-splicing? [form]
   (and (seq? form) (= (first form) 'clojure.core/unquote-splicing)))
 
+(defn- -concat [parts]
+  (case (count parts)
+    0 nil
+    1 (first parts)
+    `(concat ~@parts)))
+
 (defn- quote-fn* [form]
   (cond
     (symbol? form) `'~(resolve form)
@@ -37,16 +43,20 @@
                             (second x)
                             [(quote-fn* x)]))
                         xs)
-            cat `(concat ~@parts)]
+            cat (-concat parts)]
         (cond
           (vector? form) (if splice?
                            `(vec ~cat)
                            (mapv first parts))
-          (map? form) `(apply hash-map ~cat)
+          (map? form) (if splice? 
+                        `(apply hash-map ~cat)
+                        (case (count parts)
+                          0 {}
+                          2 (let [[k v] parts]
+                              {(first k) (first v)})
+                          `(hash-map ~@(map first parts))))
           (set? form) (if splice?
-                        (if (next parts)
-                          `(set ~cat)
-                          `(set ~(first parts)))
+                        `(set ~cat)
                         (case (count parts)
                           0 #{}
                           1 #{(ffirst parts)}
@@ -57,7 +67,7 @@
                                   ~@(map first (subvec parts 0 first-splice))
                                   ~(if (= (inc first-splice) (count splice-at))
                                      (peek parts)
-                                     `(concat ~@(subvec parts first-splice)))))
+                                     (-concat (subvec parts first-splice)))))
                         `(list ~@(map first parts)))
           :else (throw (Exception. "Unknown collection type"))))
     :else `'~form))

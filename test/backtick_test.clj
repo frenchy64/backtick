@@ -74,8 +74,7 @@
     (is (= [] (macroexpand-1 '(backtick/syntax-quote []))))
     (is (= '['1 a] (macroexpand-1 '(backtick/syntax-quote [1 ~a]))))
     (is (= '[local-variable] (macroexpand-1 '(backtick/syntax-quote [~local-variable]))))
-    ;; OK (could remove concat call for bonus points)
-    (is (= '(clojure.core/vec (clojure.core/concat local-variable))
+    (is (= '(clojure.core/vec local-variable)
            (macroexpand-1 '(backtick/syntax-quote [~@local-variable]))))
     (is (= #{} (macroexpand-1 '(backtick/syntax-quote #{}))))
     (is (= '#{a} (macroexpand-1 '(backtick/syntax-quote #{~a}))))
@@ -83,9 +82,11 @@
            (macroexpand-1 '(backtick/syntax-quote #{~@a}))))
     (is (= '(clojure.core/hash-set a b)
            (macroexpand-1 (list 'backtick/syntax-quote (sorted-set-by #(compare (last %1) (last %2)) '~a '~b)))))
-    ;;OK
-    (is (= '(clojure.core/set (clojure.core/concat a b))
-           (macroexpand-1 (list 'backtick/syntax-quote (sorted-set-by #(compare (last %1) (last %2)) '~@a '~@b)))))
+    ;; TODO more direct, but introducing dependency on `into`: (into (set a) b)
+    (is (contains?
+          #{'(clojure.core/set (clojure.core/concat a b))
+            '(clojure.core/set (clojure.core/concat b a))}
+          (macroexpand-1 '(backtick/syntax-quote #{~@a ~@b}))))
     (is (= '(clojure.core/list '1 local-variable)
            (macroexpand-1 '(backtick/syntax-quote (1 ~local-variable)))))
     (is (= '(clojure.core/apply clojure.core/list '1 (clojure.core/concat local-variable ['2]))
@@ -94,12 +95,10 @@
            (macroexpand-1 '(backtick/syntax-quote (1 ~@local-variable)))))
     (is (= '(clojure.core/apply clojure.core/list local-variable)
            (macroexpand-1 '(backtick/syntax-quote (~@local-variable)))))
-    ;;TODO should be {}
-    (is (= '(clojure.core/apply clojure.core/hash-map (clojure.core/concat))
-           (macroexpand-1 '(backtick/syntax-quote {}))))
-    ;;TODO should be (hash-map local-variable1 local-variable2)
-    (is (= '(clojure.core/apply clojure.core/hash-map (clojure.core/concat [local-variable1] [local-variable2]))
+    (is (= {} (macroexpand-1 '(backtick/syntax-quote {}))))
+    (is (= '{local-variable1 local-variable2}
            (macroexpand-1 '(backtick/syntax-quote {~local-variable1 ~local-variable2}))))
-    ;; OK
+    (is (= '(clojure.core/hash-map local-variable1 local-variable2 local-variable3 local-variable4)
+           (macroexpand-1 '(backtick/syntax-quote {~local-variable1 ~local-variable2 ~local-variable3 ~local-variable4}))))
     (is (= '(clojure.core/apply clojure.core/hash-map (clojure.core/concat local-variable1 local-variable2))
            (macroexpand-1 '(backtick/syntax-quote {~@local-variable1 ~@local-variable2}))))))
