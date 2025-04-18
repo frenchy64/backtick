@@ -71,13 +71,26 @@
 (deftest expansion-tests
   (binding [*ns* (the-ns 'backtick-test)]
     (is (= [] (macroexpand-1 '(backtick/syntax-quote []))))
-    ;;TODO should be [1 a]
-    (is (= '(clojure.core/vec (clojure.core/concat ['1] [a]))
-           (macroexpand-1 '(backtick/syntax-quote [1 ~a]))))
+    (is (= '['1 a] (macroexpand-1 '(backtick/syntax-quote [1 ~a]))))
     (is (= '[local-variable] (macroexpand-1 '(backtick/syntax-quote [~local-variable]))))
-    ;; OK (could remove concat call)
+    ;; OK (could remove concat call for bonus points)
     (is (= '(clojure.core/vec (clojure.core/concat local-variable))
            (macroexpand-1 '(backtick/syntax-quote [~@local-variable]))))
+    ;;TODO should be #{}
+    (is (= '(clojure.core/set (clojure.core/concat))
+           (macroexpand-1 '(backtick/syntax-quote #{}))))
+    ;;TODO should be #{a}
+    (is (= '(clojure.core/set (clojure.core/concat [a]))
+           (macroexpand-1 '(backtick/syntax-quote #{~a}))))
+    ;;TODO should be (set a)
+    (is (= '(clojure.core/set (clojure.core/concat a))
+           (macroexpand-1 '(backtick/syntax-quote #{~@a}))))
+    ;;TODO should be (clojure.core/hash-set a b)
+    (is (= '(clojure.core/set (clojure.core/concat [a] [b]))
+           (macroexpand-1 (list 'backtick/syntax-quote (sorted-set-by #(compare (last %1) (last %2)) '~a '~b)))))
+    ;;OK
+    (is (= '(clojure.core/set (clojure.core/concat a b))
+           (macroexpand-1 (list 'backtick/syntax-quote (sorted-set-by #(compare (last %1) (last %2)) '~@a '~@b)))))
     ;;TODO should be (list 1 local-variable)
     (is (= '(clojure.core/apply clojure.core/list (clojure.core/concat ['1] [local-variable]))
            (macroexpand-1 '(backtick/syntax-quote (1 ~local-variable)))))
