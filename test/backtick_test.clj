@@ -67,3 +67,24 @@
              inc
              backtick.test/inc
              quote]))))
+
+(deftest expansion-tests
+  (binding [*ns* (the-ns 'backtick-test)]
+    ;;TODO should be []
+    (is (= '(clojure.core/vec (clojure.core/concat))
+           (macroexpand-1 '(backtick/syntax-quote []))))
+    ;;TODO should be [1 a]
+    (is (= '(clojure.core/vec (clojure.core/concat ['1] [a]))
+           (macroexpand-1 '(backtick/syntax-quote [1 ~a]))))
+    ;;TODO should be [local-variable]
+    (is (= '(clojure.core/vec (clojure.core/concat [local-variable]))
+           (macroexpand-1 '(backtick/syntax-quote [~local-variable]))))
+    ;;TODO should be (list 1 local-variable)
+    (is (= '(clojure.core/apply clojure.core/list (clojure.core/concat ['1] [local-variable]))
+           (macroexpand-1 '(backtick/syntax-quote (1 ~local-variable)))))
+    ;;TODO should be (hash-map local-variable1 local-variable2)
+    (is (= '(clojure.core/apply clojure.core/hash-map (clojure.core/concat [local-variable1] [local-variable2]))
+           (macroexpand-1 '(backtick/syntax-quote {~local-variable1 ~local-variable2}))))
+    ;; OK
+    (is (= '(clojure.core/apply clojure.core/hash-map (clojure.core/concat local-variable1 local-variable2))
+           (macroexpand-1 '(backtick/syntax-quote {~@local-variable1 ~@local-variable2}))))))
