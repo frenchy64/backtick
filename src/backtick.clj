@@ -29,13 +29,15 @@
     (unquote-splicing? form) (throw (Exception. "splice not in list"))
     (record? form) `'~form
     (coll? form)
-      (let [xs (if (map? form) (apply concat form) form)
-            splice? (some unquote-splicing? xs)
-            parts (for [x xs]
-                    (if (unquote-splicing? x)
-                      (second x)
-                      [(quote-fn* x)]))
-            cat (doall `(concat ~@parts))]
+      (let [xs (if (map? form) (apply concat form) (seq form))
+            splice-at (mapv unquote-splicing? xs)
+            splice? (boolean (some identity splice-at))
+            parts (mapv (fn [x]
+                          (if (unquote-splicing? x)
+                            (second x)
+                            [(quote-fn* x)]))
+                        xs)
+            cat `(concat ~@parts)]
         (cond
           (vector? form) (if splice?
                            `(vec ~cat)
@@ -49,7 +51,14 @@
                           0 #{}
                           1 #{(ffirst parts)}
                           `(hash-set ~@(map first parts))))
-          (seq? form) `(apply list ~cat)
+          (seq? form) (if splice?
+                        (let [first-splice (some #(when (nth splice-at %) %) (range (count splice-at)))]
+                          `(apply list
+                                  ~@(map first (subvec parts 0 first-splice))
+                                  ~(if (= (inc first-splice) (count splice-at))
+                                     (peek parts)
+                                     `(concat ~@(subvec parts first-splice)))))
+                        `(list ~@(map first parts)))
           :else (throw (Exception. "Unknown collection type"))))
     :else `'~form))
 
