@@ -70,15 +70,14 @@
 
 (deftest expansion-tests
   (binding [*ns* (the-ns 'backtick-test)]
-    ;;TODO should be []
-    (is (= '(clojure.core/vec (clojure.core/concat))
-           (macroexpand-1 '(backtick/syntax-quote []))))
+    (is (= [] (macroexpand-1 '(backtick/syntax-quote []))))
     ;;TODO should be [1 a]
     (is (= '(clojure.core/vec (clojure.core/concat ['1] [a]))
            (macroexpand-1 '(backtick/syntax-quote [1 ~a]))))
-    ;;TODO should be [local-variable]
-    (is (= '(clojure.core/vec (clojure.core/concat [local-variable]))
-           (macroexpand-1 '(backtick/syntax-quote [~local-variable]))))
+    (is (= '[local-variable] (macroexpand-1 '(backtick/syntax-quote [~local-variable]))))
+    ;; OK (could remove concat call)
+    (is (= '(clojure.core/vec (clojure.core/concat local-variable))
+           (macroexpand-1 '(backtick/syntax-quote [~@local-variable]))))
     ;;TODO should be (list 1 local-variable)
     (is (= '(clojure.core/apply clojure.core/list (clojure.core/concat ['1] [local-variable]))
            (macroexpand-1 '(backtick/syntax-quote (1 ~local-variable)))))

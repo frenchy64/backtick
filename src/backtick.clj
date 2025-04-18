@@ -30,13 +30,14 @@
     (record? form) `'~form
     (coll? form)
       (let [xs (if (map? form) (apply concat form) form)
+            splice? (some unquote-splicing? xs)
             parts (for [x xs]
                     (if (unquote-splicing? x)
                       (second x)
                       [(quote-fn* x)]))
             cat (doall `(concat ~@parts))]
         (cond
-          (vector? form) `(vec ~cat)
+          (vector? form) (if splice? `(vec ~cat) (mapv first parts))
           (map? form) `(apply hash-map ~cat)
           (set? form) `(set ~cat)
           (seq? form) `(apply list ~cat)
