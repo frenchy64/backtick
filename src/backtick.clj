@@ -72,7 +72,12 @@
                           ()
                           `(list ~@(map first parts))))
           :else (throw (Exception. "Unknown collection type"))))
-    :else `'~form))
+    :else (if (or (keyword? form)
+                  (number? form)
+                  (char? form)
+                  (string? form))
+            form
+            `'~form)))
 
 (defn quote-fn [resolver form]
   (binding [*resolve* resolver
