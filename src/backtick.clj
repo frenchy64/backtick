@@ -50,10 +50,9 @@
                            (mapv first parts))
           (map? form) (if splice? 
                         `(apply hash-map ~cat)
-                        (case (count parts)
-                          0 {}
-                          2 (let [[k v] parts]
-                              {(first k) (first v)})
+                        (if (or (= 1 (count form))
+                                (every? (some-fn keyword? number? char? string?) (keys form)))
+                          (apply array-map (apply concat parts))
                           `(hash-map ~@(map first parts))))
           (set? form) (if splice?
                         `(set ~cat)

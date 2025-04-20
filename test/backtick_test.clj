@@ -100,6 +100,10 @@
     (is (= {} (macroexpand-1 '(backtick/syntax-quote {}))))
     (is (= '{local-variable1 local-variable2}
            (macroexpand-1 '(backtick/syntax-quote {~local-variable1 ~local-variable2}))))
+    (is (= '{:a local-variable2 :b local-variable4}
+           (macroexpand-1 '(backtick/syntax-quote {:a ~local-variable2 :b ~local-variable4}))))
+    (is (= '(clojure.core/hash-map :a local-variable2 'backtick-test/a local-variable4)
+           (macroexpand-1 '(backtick/syntax-quote {:a ~local-variable2 a ~local-variable4}))))
     (is (= '(clojure.core/hash-map local-variable1 local-variable2 local-variable3 local-variable4)
            (macroexpand-1 '(backtick/syntax-quote {~local-variable1 ~local-variable2 ~local-variable3 ~local-variable4}))))
     (is (= '(clojure.core/apply clojure.core/hash-map (clojure.core/concat local-variable1 local-variable2))
@@ -153,6 +157,7 @@
    []
    {}
    ()
+   [[[[]]]]
    '(let [~'foo 42] (+ foo foo))
    '(binding [] ~@[])])
 
@@ -160,13 +165,15 @@
 (deftest bench
   (binding [*ns* (the-ns 'backtick-test)]
     (doseq [c bench-cases]
-      (bench-eval-expanded-syntax-quote
-        c
-        {:benchmark* unreasonably-quick-benchmark*
-         :samples 10000})))
+      (binding [bench/*report-progress* true]
+        (bench-eval-expanded-syntax-quote
+          c
+          {:benchmark* unreasonably-quick-benchmark*
+           :samples 10000}))))
 )
 
 (comment
+  (bench/quick-bench (eval `(apply list [])) :verbose)
   (do '`42)
   (macroexpand-1 '(backtick/syntax-quote 42))
   (do '`:foo)
@@ -191,4 +198,6 @@
   (eval (list 'backtick/syntax-quote
               (macroexpand-1 (list 'backtick/syntax-quote
                                    (macroexpand-1 (list 'backtick/syntax-quote 42))))))
+  (do '`~`:a)
+  (macroexpand-1 '(backtick/syntax-quote ~(macroexpand-1 '(backtick/syntax-quote :a))))
   )
