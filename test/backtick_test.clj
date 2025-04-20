@@ -87,6 +87,7 @@
           #{'(clojure.core/set (clojure.core/concat a b))
             '(clojure.core/set (clojure.core/concat b a))}
           (macroexpand-1 '(backtick/syntax-quote #{~@a ~@b}))))
+    (is (= () (macroexpand-1 '(backtick/syntax-quote ()))))
     (is (= '(clojure.core/list '1 local-variable)
            (macroexpand-1 '(backtick/syntax-quote (1 ~local-variable)))))
     (is (= '(clojure.core/apply clojure.core/list '1 (clojure.core/concat local-variable ['2]))

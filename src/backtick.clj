@@ -68,7 +68,9 @@
                                   ~(if (= (inc first-splice) (count splice-at))
                                      (peek parts)
                                      (-concat (subvec parts first-splice)))))
-                        `(list ~@(map first parts)))
+                        (if (empty? parts)
+                          ()
+                          `(list ~@(map first parts))))
           :else (throw (Exception. "Unknown collection type"))))
     :else `'~form))
 
