@@ -117,13 +117,18 @@
 (defn unreasonably-quick-benchmark* [f opts]
   (let [start (. System (nanoTime))
         samples (:samples opts 100)
-        _ (dotimes [_ samples] (f))
+        _ (dotimes [_ samples]
+            (assert (not (Thread/interrupted)))
+            (f))
         end (. System (nanoTime))]
     (assert (pos? samples))
-    {:mean (/ (- end start) samples)}))
+    {:mean (double (/ (- end start) samples))}))
 
 (comment
-  (unreasonably-quick-benchmark* #(eval nil) nil)
+  (unreasonably-quick-benchmark* #(eval nil) {:samples 100000})
+  (unreasonably-quick-benchmark* #(eval '`(apply + 1 2 3)) {:samples 100000})
+  (unreasonably-quick-benchmark* #(eval '`(apply + 1 2 3)) {:samples 1000})
+  (unreasonably-quick-benchmark* #(eval (macroexpand-1 '(syntax-quote (apply + 1 2 3)))) {:samples 1000})
 )
 
 (defn bench-eval-expanded-syntax-quote [input {:keys [benchmark*] :or {benchmark* bench/quick-benchmark*}
@@ -142,14 +147,15 @@
         clojure-bench (benchmark* #(clojure.lang.Compiler/eval expanded-clojure-syntax-quote) opts)
         backtick-bench (benchmark* #(clojure.lang.Compiler/eval expanded-backtick-syntax-quoted) opts)
         clojure-mean (:mean clojure-bench)
-        backtick-mean (:mean backtick-bench)]
+        backtick-mean (:mean backtick-bench)
+        multiplier (double (/ backtick-mean clojure-mean))]
     (println)
     (println (str "Evaluating the expansion of (backtick/syntax-quote " (pr-str input) ") takes "
-                  (double (/ backtick-mean clojure-mean))
+                  multiplier
                   " of the execution time of `" (pr-str input)))
     (println "- backtick expansion:" (pr-str expanded-backtick-syntax-quoted))
     (println "- Clojure expansion:" (pr-str expanded-clojure-syntax-quote))
-    ))
+    multiplier))
 
 (def bench-cases
   [nil
@@ -165,11 +171,24 @@
 (deftest bench
   (binding [*ns* (the-ns 'backtick-test)]
     (doseq [c bench-cases]
-      (binding [bench/*report-progress* true]
-        (bench-eval-expanded-syntax-quote
-          c
-          {:benchmark* unreasonably-quick-benchmark*
-           :samples 10000}))))
+      (assert (not (Thread/interrupted)))
+      (let [times 100
+            multipliers (mapv (fn [i]
+                                (println "Iteration" i)
+                                (assert (not (Thread/interrupted)))
+                                (binding [bench/*report-progress* true]
+                                  (bench-eval-expanded-syntax-quote
+                                    c
+                                    {:benchmark* unreasonably-quick-benchmark*
+                                     :samples 1000})))
+                              (range times))
+            avg (double (/ (apply + multipliers) times))]
+        (println)
+        (println (str "After " times " iterations, the average time "
+                      "it takes to evaluate the expansion of "
+                      (pr-str (list 'syntax-quote c))
+                      " in backtick is " avg " of the execution time of `" (pr-str c)))
+        )))
 )
 
 (comment
