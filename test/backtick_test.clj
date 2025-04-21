@@ -112,6 +112,7 @@
     (is (= :a (macroexpand-1 '(backtick/syntax-quote :a))))
     (is (= \a (macroexpand-1 '(backtick/syntax-quote \a))))
     (is (= "a" (macroexpand-1 '(backtick/syntax-quote "a"))))
+    (is (nil? (macroexpand-1 '(backtick/syntax-quote nil))))
     (is (= "(quote #\"a\")" (pr-str (macroexpand-1 '(backtick/syntax-quote #"a")))))
     ;;FIXME should be (clojure.core/list (quote clojure.core/let) [foo 42] (quote (clojure.core/+ user/foo user/foo)))
     (is (= '(clojure.core/list 'clojure.core/let [foo 42] (clojure.core/list 'clojure.core/+ 'backtick-test/foo 'backtick-test/foo))

@@ -51,7 +51,7 @@
           (map? form) (if splice? 
                         `(apply hash-map ~cat)
                         (if (or (= 1 (count form))
-                                (every? (some-fn keyword? number? char? string?) (keys form)))
+                                (every? (some-fn keyword? number? char? string? nil?) (keys form)))
                           (apply array-map (apply concat parts))
                           `(hash-map ~@(map first parts))))
           (set? form) (if splice?
@@ -74,7 +74,8 @@
     :else (if (or (keyword? form)
                   (number? form)
                   (char? form)
-                  (string? form))
+                  (string? form)
+                  (nil? form))
             form
             `'~form)))
 
