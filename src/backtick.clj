@@ -22,6 +22,12 @@
 (defn unquote-splicing? [form]
   (and (seq? form) (= (first form) 'clojure.core/unquote-splicing)))
 
+(defn- -concat [parts]
+  (case (count parts)
+    0 nil
+    1 (first parts)
+    `(concat ~@parts)))
+
 (defn- quote-fn* [form]
   (cond
     (symbol? form) `'~(resolve form)
@@ -29,19 +35,49 @@
     (unquote-splicing? form) (throw (Exception. "splice not in list"))
     (record? form) `'~form
     (coll? form)
-      (let [xs (if (map? form) (apply concat form) form)
-            parts (for [x xs]
-                    (if (unquote-splicing? x)
-                      (second x)
-                      [(quote-fn* x)]))
-            cat (doall `(concat ~@parts))]
+      (let [xs (if (map? form) (apply concat form) (seq form))
+            splice-at (mapv unquote-splicing? xs)
+            splice? (boolean (some identity splice-at))
+            parts (mapv (fn [x]
+                          (if (unquote-splicing? x)
+                            (second x)
+                            [(quote-fn* x)]))
+                        xs)
+            cat (-concat parts)]
         (cond
-          (vector? form) `(vec ~cat)
-          (map? form) `(apply hash-map ~cat)
-          (set? form) `(set ~cat)
-          (seq? form) `(apply list ~cat)
+          (vector? form) (if splice?
+                           `(vec ~cat)
+                           (mapv first parts))
+          (map? form) (if splice? 
+                        `(apply hash-map ~cat)
+                        (if (or (= 1 (count form))
+                                (every? (some-fn keyword? number? char? string? nil?) (keys form)))
+                          (apply array-map (apply concat parts))
+                          `(hash-map ~@(map first parts))))
+          (set? form) (if splice?
+                        `(set ~cat)
+                        (case (count parts)
+                          0 #{}
+                          1 #{(ffirst parts)}
+                          `(hash-set ~@(map first parts))))
+          (seq? form) (if splice?
+                        (let [first-splice (some #(when (nth splice-at %) %) (range (count splice-at)))]
+                          `(list* ~@(map first (subvec parts 0 first-splice))
+                                  ~(if (= (inc first-splice) (count splice-at))
+                                     (peek parts)
+                                     (-concat (subvec parts first-splice)))))
+                        (if (empty? parts)
+                          ()
+                          `(list ~@(map first parts))))
           :else (throw (Exception. "Unknown collection type"))))
-    :else `'~form))
+    :else (if (or (keyword? form)
+                  (number? form)
+                  (char? form)
+                  (string? form)
+                  (nil? form)
+                  (instance? java.util.regex.Pattern form))
+            form
+            `'~form)))
 
 (defn quote-fn [resolver form]
   (binding [*resolve* resolver
