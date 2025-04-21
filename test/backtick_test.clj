@@ -114,11 +114,12 @@
     (is (= "a" (macroexpand-1 '(backtick/syntax-quote "a"))))
     (is (= "(quote #\"a\")" (pr-str (macroexpand-1 '(backtick/syntax-quote #"a")))))))
 
-(defn unreasonably-quick-benchmark* [f opts]
+(defn unreasonably-quick-benchmark* [f {:keys [stop-fn] :as opts}]
   (let [start (. System (nanoTime))
+        stop-fn (or stop-fn #(assert (not (Thread/interrupted))))
         samples (:samples opts 100)
         _ (dotimes [_ samples]
-            (assert (not (Thread/interrupted)))
+            (stop-fn)
             (f))
         end (. System (nanoTime))]
     (assert (pos? samples))
@@ -126,12 +127,14 @@
 
 (comment
   (unreasonably-quick-benchmark* #(eval nil) {:samples 100000})
+  (unreasonably-quick-benchmark* #(eval (macroexpand-1 '(syntax-quote nil))) {:samples 100})
+  (unreasonably-quick-benchmark* #(eval '`nil) {:samples 100})
   (unreasonably-quick-benchmark* #(eval '`(apply + 1 2 3)) {:samples 100000})
   (unreasonably-quick-benchmark* #(eval '`(apply + 1 2 3)) {:samples 1000})
   (unreasonably-quick-benchmark* #(eval (macroexpand-1 '(syntax-quote (apply + 1 2 3)))) {:samples 1000})
 )
 
-(defn bench-eval-expanded-syntax-quote [input {:keys [benchmark*] :or {benchmark* bench/quick-benchmark*}
+(defn bench-eval-expanded-syntax-quote [input {:keys [benchmark* stop-fn] :or {benchmark* unreasonably-quick-benchmark*}
                                                :as opts}]
   (let [expanded-clojure-syntax-quote (read-string (str "`" (pr-str input)))
         expanded-backtick-syntax-quoted (macroexpand-1 (list `backtick/syntax-quote input))
@@ -158,37 +161,58 @@
     multiplier))
 
 (def bench-cases
-  [nil
-   42
-   []
-   {}
-   ()
-   [[[[]]]]
-   '(let [~'foo 42] (+ foo foo))
-   '(binding [] ~@[])])
+  [
+   42    ;; should be 1x
+   :foo  ;; should be 1x
+   "a"   ;; should be 1x
+   nil   ;; should be 1x (FIXME often is 0.9x!)
+   #_[]    ;; backtick is ~0.35x clojure
+   #_{}    ;; backtick is ~0.32x clojure
+   #_()    ;; backtick is ~0.47x clojure
+   #_[[[[]]]] ;; backtick is ~0.32x clojure
+   #_'(let [~'foo 42] (+ foo foo)) ;; backtick is ~0.7x clojure
+   #_'(binding [] ~@[])  ;; backtick is ~0.67x clojure
+   #_{:foo 42} ;; backtick is ~0.37x clojure
+   #_{:foo 42 :bar 24 :baz 128} ;; backtick is ~0.29x clojure
+   #{:foo 42 :bar 24 :baz 128} ;; backtick is ~0.65x clojure
+   ])
 
 #_
 (deftest bench
   (binding [*ns* (the-ns 'backtick-test)]
-    (doseq [c bench-cases]
-      (assert (not (Thread/interrupted)))
-      (let [times 100
-            multipliers (mapv (fn [i]
-                                (println "Iteration" i)
-                                (assert (not (Thread/interrupted)))
-                                (binding [bench/*report-progress* true]
-                                  (bench-eval-expanded-syntax-quote
-                                    c
-                                    {:benchmark* unreasonably-quick-benchmark*
-                                     :samples 1000})))
-                              (range times))
-            avg (double (/ (apply + multipliers) times))]
-        (println)
-        (println (str "After " times " iterations, the average time "
-                      "it takes to evaluate the expansion of "
-                      (pr-str (list 'syntax-quote c))
-                      " in backtick is " avg " of the execution time of `" (pr-str c)))
-        )))
+    (let [testing-thread (Thread/currentThread)
+          stop-fn #(assert (not (.isInterrupted testing-thread)))]
+      (doto (mapv
+              (fn [c]
+                (let [bench1 (fn [attempt]
+                               (println "Attempt" attempt "for" (pr-str c))
+                               (let [_ (stop-fn)
+                                     ;; blindly remove this many "outliers" from each end, just assume the mean is the middle
+                                     remove-outliers 3
+                                     times 10
+                                     _ (assert (< (* 2 remove-outliers) times))
+                                     multipliers (mapv
+                                                   (fn [i]
+                                                     (stop-fn)
+                                                     (println "Iteration" i)
+                                                     (bench-eval-expanded-syntax-quote
+                                                       c
+                                                       {:stop-fn stop-fn
+                                                        :benchmark* unreasonably-quick-benchmark*
+                                                        :samples 100}))
+                                                   (range times))
+                                     multipliers (vec (sort multipliers))
+                                     multipliers (subvec multipliers remove-outliers (- times remove-outliers))
+                                     avg (double (/ (apply + multipliers) (count multipliers)))]
+                                 (println)
+                                 (println (str "After " times " iterations, the average time "
+                                               "it takes to evaluate the expansion of "
+                                               (pr-str (list 'syntax-quote c))
+                                               " in backtick is " avg " of the execution time of `" (pr-str c)))
+                                 avg))]
+                  [c (mapv bench1 (range 5))]))
+              bench-cases)
+        prn)))
 )
 
 (comment
@@ -219,4 +243,6 @@
                                    (macroexpand-1 (list 'backtick/syntax-quote 42))))))
   (do '`~`:a)
   (macroexpand-1 '(backtick/syntax-quote ~(macroexpand-1 '(backtick/syntax-quote :a))))
+  (do '`nil)
+  (do (macroexpand-1 '(backtick/syntax-quote nil)))
   )
