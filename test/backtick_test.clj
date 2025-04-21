@@ -83,7 +83,6 @@
            (macroexpand-1 '(backtick/syntax-quote #{~@a}))))
     (is (= '(clojure.core/hash-set a b)
            (macroexpand-1 (list 'backtick/syntax-quote (sorted-set-by #(compare (last %1) (last %2)) '~a '~b)))))
-    ;; TODO more direct, but introducing dependency on `into`: (into (set a) b)
     (is (contains?
           #{'(clojure.core/set (clojure.core/concat a b))
             '(clojure.core/set (clojure.core/concat b a))}
@@ -91,11 +90,11 @@
     (is (= () (macroexpand-1 '(backtick/syntax-quote ()))))
     (is (= '(clojure.core/list 1 local-variable)
            (macroexpand-1 '(backtick/syntax-quote (1 ~local-variable)))))
-    (is (= '(clojure.core/apply clojure.core/list 1 (clojure.core/concat local-variable [2]))
+    (is (= '(clojure.core/list* 1 (clojure.core/concat local-variable [2]))
            (macroexpand-1 '(backtick/syntax-quote (1 ~@local-variable 2)))))
-    (is (= '(clojure.core/apply clojure.core/list 1 local-variable)
+    (is (= '(clojure.core/list* 1 local-variable)
            (macroexpand-1 '(backtick/syntax-quote (1 ~@local-variable)))))
-    (is (= '(clojure.core/apply clojure.core/list local-variable)
+    (is (= '(clojure.core/list* local-variable)
            (macroexpand-1 '(backtick/syntax-quote (~@local-variable)))))
     (is (= {} (macroexpand-1 '(backtick/syntax-quote {}))))
     (is (= '{local-variable1 local-variable2}
@@ -113,10 +112,20 @@
     (is (= \a (macroexpand-1 '(backtick/syntax-quote \a))))
     (is (= "a" (macroexpand-1 '(backtick/syntax-quote "a"))))
     (is (nil? (macroexpand-1 '(backtick/syntax-quote nil))))
-    (is (= "(quote #\"a\")" (pr-str (macroexpand-1 '(backtick/syntax-quote #"a")))))
+    (is (= "#\"a\"" (pr-str (macroexpand-1 '(backtick/syntax-quote #"a")))))
+    ;;FIXME should be (quote #"a")
+    (is (= "(clojure.core/list (quote quote) #\"a\")" (pr-str (macroexpand-1 '(backtick/syntax-quote '#"a")))))
     ;;FIXME should be (clojure.core/list (quote clojure.core/let) [foo 42] (quote (clojure.core/+ user/foo user/foo)))
     (is (= '(clojure.core/list 'clojure.core/let [foo 42] (clojure.core/list 'clojure.core/+ 'backtick-test/foo 'backtick-test/foo))
-           (macroexpand-1 '(backtick/syntax-quote (let [~foo 42] (+ foo foo))))))))
+           (macroexpand-1 '(backtick/syntax-quote (let [~foo 42] (+ foo foo))))))
+    ;;FIXME should be (quote (nil))
+    (is (= '(clojure.core/list nil)
+           (macroexpand-1 '(backtick/syntax-quote (nil)))))
+    (is (= (list 'quote 'foo) (macroexpand-1 '(backtick/syntax-quote ~'foo))))
+    ;;FIXME should be (quote (foo foo))
+    (is (= '(clojure.core/list 'foo 'foo)
+           (macroexpand-1 '(backtick/syntax-quote (~'foo ~'foo)))))
+    ))
 
 (defn unreasonably-quick-benchmark* [f {:keys [stop-fn] :as opts}]
   (let [start (. System (nanoTime))
@@ -173,37 +182,37 @@
    {}    ;; backtick is ~0.32x clojure
    ()    ;; backtick is ~0.47x clojure
    [[[[]]]] ;; backtick is ~0.32x clojure
-   '(let [~'foo 42] (+ foo foo)) ;; backtick is ~0.7x clojure
-   '(binding [] ~@[])  ;; backtick is ~0.67x clojure
+   '(let [~(identity 'foo) 42] (+ foo foo)) ;; backtick is ~0.7x clojure
+   '(binding [] ~@(identity []))  ;; backtick is ~0.67x clojure
    {:foo 42} ;; backtick is ~0.37x clojure
    {:foo 42 :bar 24 :baz 128} ;; backtick is ~0.29x clojure
    #{:foo 42 :bar 24 :baz 128} ;; backtick is ~0.65x clojure
    ;; backtick is ~0.75x clojure (from clojure.core/destructure)
-   '(if (seq? ~'gmap)
-      (if (next ~'gmapseq)
-        (clojure.lang.PersistentArrayMap/createAsIfByAssoc (to-array ~'gmapseq))
-        (if (seq ~'gmapseq) (first ~'gmapseq) clojure.lang.PersistentArrayMap/EMPTY))
-      ~'gmap)
+   '(if (seq? ~(identity 'gmap))
+      (if (next ~(identity 'gmapseq))
+        (clojure.lang.PersistentArrayMap/createAsIfByAssoc (to-array ~(identity 'gmapseq)))
+        (if (seq ~(identity 'gmapseq)) (first ~(identity 'gmapseq)) clojure.lang.PersistentArrayMap/EMPTY))
+      ~(identity 'gmap))
    ;; backtick is ~0.75x clojure (from clojure.core/destructure)
-   '(fn ~'giter [~'gxs]
+   '(fn ~(identity 'giter) [~(identity 'gxs)]
       (lazy-seq
-        (loop [~'gxs ~'gxs]
-          (when-let [~'gxs (seq ~'gxs)]
-            (if (chunked-seq? ~'gxs)
-              (let [~'c (chunk-first ~'gxs)
-                    ~'size (int (count ~'c))
-                    ~'gb (chunk-buffer ~'size)]
-                (if (loop [~'gi (int 0)]
-                      (if (< ~'gi ~'size)
-                        (let [~'bind (.nth ~'c ~'gi)]
-                          ~'(do-cmod mod-pairs))
+        (loop [~(identity 'gxs) ~(identity 'gxs)]
+          (when-let [~(identity 'gxs) (seq ~(identity 'gxs))]
+            (if (chunked-seq? ~(identity 'gxs))
+              (let [~(identity 'c) (chunk-first ~(identity 'gxs))
+                    ~(identity 'size) (int (count ~(identity 'c)))
+                    ~(identity 'gb) (chunk-buffer ~(identity 'size))]
+                (if (loop [~(identity 'gi) (int 0)]
+                      (if (< ~(identity 'gi) ~(identity 'size))
+                        (let [~(identity 'bind) (.nth ~(identity 'c) ~(identity 'gi))]
+                          ~(identity '(do-cmod mod-pairs)))
                         true))
                   (chunk-cons
-                    (chunk ~'gb)
-                    (~'giter (chunk-rest ~'gxs)))
-                  (chunk-cons (chunk ~'gb) nil)))
-              (let [~'bind (first ~'gxs)]
-                ~'(do-mod mod-pairs)))))))
+                    (chunk ~(identity 'gb))
+                    (~(identity 'giter) (chunk-rest ~(identity 'gxs))))
+                  (chunk-cons (chunk ~(identity 'gb)) nil)))
+              (let [~(identity 'bind) (first ~(identity 'gxs))]
+                ~(identity '(do-mod mod-pairs))))))))
    ])
 
 #_

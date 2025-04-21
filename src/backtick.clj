@@ -62,8 +62,7 @@
                           `(hash-set ~@(map first parts))))
           (seq? form) (if splice?
                         (let [first-splice (some #(when (nth splice-at %) %) (range (count splice-at)))]
-                          `(apply list
-                                  ~@(map first (subvec parts 0 first-splice))
+                          `(list* ~@(map first (subvec parts 0 first-splice))
                                   ~(if (= (inc first-splice) (count splice-at))
                                      (peek parts)
                                      (-concat (subvec parts first-splice)))))
@@ -75,7 +74,8 @@
                   (number? form)
                   (char? form)
                   (string? form)
-                  (nil? form))
+                  (nil? form)
+                  (instance? java.util.regex.Pattern form))
             form
             `'~form)))
 
