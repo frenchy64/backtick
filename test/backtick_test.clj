@@ -174,7 +174,37 @@
    #_'(binding [] ~@[])  ;; backtick is ~0.67x clojure
    #_{:foo 42} ;; backtick is ~0.37x clojure
    #_{:foo 42 :bar 24 :baz 128} ;; backtick is ~0.29x clojure
+   #_
    #{:foo 42 :bar 24 :baz 128} ;; backtick is ~0.65x clojure
+   ;; backtick is ~0.75x clojure
+   ;; (from clojure.core/destructure)
+   #_
+   '(if (seq? ~'gmap)
+      (if (next ~'gmapseq)
+        (clojure.lang.PersistentArrayMap/createAsIfByAssoc (to-array ~'gmapseq))
+        (if (seq ~'gmapseq) (first ~'gmapseq) clojure.lang.PersistentArrayMap/EMPTY))
+      ~'gmap)
+   ;; backtick is ~0.75x clojure
+   ;; (from clojure.core/destructure)
+   '(fn ~'giter [~'gxs]
+      (lazy-seq
+        (loop [~'gxs ~'gxs]
+          (when-let [~'gxs (seq ~'gxs)]
+            (if (chunked-seq? ~'gxs)
+              (let [~'c (chunk-first ~'gxs)
+                    ~'size (int (count ~'c))
+                    ~'gb (chunk-buffer ~'size)]
+                (if (loop [~'gi (int 0)]
+                      (if (< ~'gi ~'size)
+                        (let [~'bind (.nth ~'c ~'gi)]
+                          ~'(do-cmod mod-pairs))
+                        true))
+                  (chunk-cons
+                    (chunk ~'gb)
+                    (~'giter (chunk-rest ~'gxs)))
+                  (chunk-cons (chunk ~'gb) nil)))
+              (let [~'bind (first ~'gxs)]
+                ~'(do-mod mod-pairs)))))))
    ])
 
 #_
