@@ -112,7 +112,10 @@
     (is (= :a (macroexpand-1 '(backtick/syntax-quote :a))))
     (is (= \a (macroexpand-1 '(backtick/syntax-quote \a))))
     (is (= "a" (macroexpand-1 '(backtick/syntax-quote "a"))))
-    (is (= "(quote #\"a\")" (pr-str (macroexpand-1 '(backtick/syntax-quote #"a")))))))
+    (is (= "(quote #\"a\")" (pr-str (macroexpand-1 '(backtick/syntax-quote #"a")))))
+    ;;FIXME should be (clojure.core/list (quote clojure.core/let) [foo 42] (quote (clojure.core/+ user/foo user/foo)))
+    (is (= '(clojure.core/list 'clojure.core/let [foo 42] (clojure.core/list 'clojure.core/+ 'backtick-test/foo 'backtick-test/foo))
+           (macroexpand-1 '(backtick/syntax-quote (let [~foo 42] (+ foo foo))))))))
 
 (defn unreasonably-quick-benchmark* [f {:keys [stop-fn] :as opts}]
   (let [start (. System (nanoTime))
@@ -152,40 +155,35 @@
         clojure-mean (:mean clojure-bench)
         backtick-mean (:mean backtick-bench)
         multiplier (double (/ backtick-mean clojure-mean))]
-    (println)
-    (println (str "Evaluating the expansion of (backtick/syntax-quote " (pr-str input) ") takes "
-                  multiplier
-                  " of the execution time of `" (pr-str input)))
-    (println "- backtick expansion:" (pr-str expanded-backtick-syntax-quoted))
-    (println "- Clojure expansion:" (pr-str expanded-clojure-syntax-quote))
+    ;(println)
+    ;(println (str "Evaluating the expansion of (backtick/syntax-quote " (pr-str input) ") takes "
+    ;              multiplier
+    ;              " of the execution time of `" (pr-str input)))
+    ;(println "- backtick expansion:" (pr-str expanded-backtick-syntax-quoted))
+    ;(println "- Clojure expansion:" (pr-str expanded-clojure-syntax-quote))
     multiplier))
 
 (def bench-cases
-  [
-   42    ;; should be 1x
-   :foo  ;; should be 1x
-   "a"   ;; should be 1x
-   nil   ;; should be 1x (FIXME often is 0.9x!)
-   #_[]    ;; backtick is ~0.35x clojure
-   #_{}    ;; backtick is ~0.32x clojure
-   #_()    ;; backtick is ~0.47x clojure
-   #_[[[[]]]] ;; backtick is ~0.32x clojure
-   #_'(let [~'foo 42] (+ foo foo)) ;; backtick is ~0.7x clojure
-   #_'(binding [] ~@[])  ;; backtick is ~0.67x clojure
-   #_{:foo 42} ;; backtick is ~0.37x clojure
-   #_{:foo 42 :bar 24 :baz 128} ;; backtick is ~0.29x clojure
-   #_
+  [42    ;; backtick is ~1x clojure
+   :foo  ;; backtick is ~1x clojure
+   "a"   ;; backtick is ~1x clojure
+   nil   ;; backtick is ~1x clojure (FIXME often is 0.9x! why??)
+   []    ;; backtick is ~0.35x clojure
+   {}    ;; backtick is ~0.32x clojure
+   ()    ;; backtick is ~0.47x clojure
+   [[[[]]]] ;; backtick is ~0.32x clojure
+   '(let [~'foo 42] (+ foo foo)) ;; backtick is ~0.7x clojure
+   '(binding [] ~@[])  ;; backtick is ~0.67x clojure
+   {:foo 42} ;; backtick is ~0.37x clojure
+   {:foo 42 :bar 24 :baz 128} ;; backtick is ~0.29x clojure
    #{:foo 42 :bar 24 :baz 128} ;; backtick is ~0.65x clojure
-   ;; backtick is ~0.75x clojure
-   ;; (from clojure.core/destructure)
-   #_
+   ;; backtick is ~0.75x clojure (from clojure.core/destructure)
    '(if (seq? ~'gmap)
       (if (next ~'gmapseq)
         (clojure.lang.PersistentArrayMap/createAsIfByAssoc (to-array ~'gmapseq))
         (if (seq ~'gmapseq) (first ~'gmapseq) clojure.lang.PersistentArrayMap/EMPTY))
       ~'gmap)
-   ;; backtick is ~0.75x clojure
-   ;; (from clojure.core/destructure)
+   ;; backtick is ~0.75x clojure (from clojure.core/destructure)
    '(fn ~'giter [~'gxs]
       (lazy-seq
         (loop [~'gxs ~'gxs]
@@ -215,7 +213,7 @@
       (doto (mapv
               (fn [c]
                 (let [bench1 (fn [attempt]
-                               (println "Attempt" attempt "for" (pr-str c))
+                               ;(println "Attempt" attempt "for" (pr-str c))
                                (let [_ (stop-fn)
                                      ;; blindly remove this many "outliers" from each end, just assume the mean is the middle
                                      remove-outliers 3
@@ -224,7 +222,7 @@
                                      multipliers (mapv
                                                    (fn [i]
                                                      (stop-fn)
-                                                     (println "Iteration" i)
+                                                     ;(println "Iteration" i)
                                                      (bench-eval-expanded-syntax-quote
                                                        c
                                                        {:stop-fn stop-fn
@@ -235,7 +233,8 @@
                                      multipliers (subvec multipliers remove-outliers (- times remove-outliers))
                                      avg (double (/ (apply + multipliers) (count multipliers)))]
                                  (println)
-                                 (println (str "After " times " iterations, the average time "
+                                 (println (str (format "[%s] " avg)
+                                               "After " times " iterations, the average time "
                                                "it takes to evaluate the expansion of "
                                                (pr-str (list 'syntax-quote c))
                                                " in backtick is " avg " of the execution time of `" (pr-str c)))
@@ -276,3 +275,4 @@
   (do '`nil)
   (do (macroexpand-1 '(backtick/syntax-quote nil)))
   )
+
